@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10251f">
+    <meta name="description" content="A cozy little Christmas countdown. Open a door and find a surprise.">
+    <title>The Christmas Calendar</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="snow snow-back" aria-hidden="true"></div>
+    <div class="snow snow-front" aria-hidden="true"></div>
+
+    <main class="page-shell">
+      <header class="masthead">
+        <p class="eyebrow"><span aria-hidden="true">&#10022;</span> A little winter magic <span aria-hidden="true">&#10022;</span></p>
+        <h1>The Christmas <span>Calendar</span></h1>
+        <p class="intro">Twenty-four little moments to make the season bright.<br>Choose a door and see what is waiting inside.</p>
+        <div class="light-string" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </header>
+
+      <section class="calendar-section" aria-labelledby="calendar-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">December, at your own pace</p>
+            <h2 id="calendar-heading">Your advent calendar</h2>
+          </div>
+          <p class="open-count" id="open-count" aria-live="polite">0 of 24 opened</p>
+        </div>
+
+        <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
+        <div class="calendar-grid" id="calendar-grid" aria-label="Advent calendar doors"></div>
+      </section>
+
+      <footer class="page-footer">
+        <p>Made for slow mornings, warm lights, and the wonder of December.</p>
+        <!-- DEVELOPMENT ONLY: remove this button before production release. -->
+        <button class="reset-button" id="reset-calendar" type="button">Reset calendar</button>
+      </footer>
+    </main>
+
+    <dialog class="content-modal" id="content-modal" aria-labelledby="modal-title">
+      <div class="scene-stage" id="scene-stage">
+        <button class="scene-return" id="scene-return" type="button" aria-label="Zoom out to the calendar" tabindex="-1"></button>
+        <div class="scene-doorway">
+          <div class="doorway-glow" aria-hidden="true"></div>
+          <button class="scene-door-face" id="scene-door-face" type="button" aria-label="The opened door. Click to zoom back out.">
+            <span id="scene-door-number" aria-hidden="true"></span>
+            <span class="scene-door-handle" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="modal-card">
+          <button class="modal-close" id="modal-close" type="button" aria-label="Close"> &times; </button>
+          <p class="modal-day" id="modal-day"></p>
+          <h2 id="modal-title"></h2>
+          <div class="modal-content" id="modal-content"></div>
+        </div>
+      </div>
+    </dialog>
+  </body>
+</html>
