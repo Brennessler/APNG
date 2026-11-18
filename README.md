@@ -1,24 +1,15 @@
-# The Christmas Calendar
+# Adventa på nå gott — Christmas Video Store
 
-A static site built with HTML, CSS, vanilla JavaScript, and JSON. Publish this folder as the root of a GitHub Pages site; no build step or package installation is required. Because the calendar fetches `calendar.json`, preview it through a local web server rather than opening `index.html` directly as a `file://` URL.
+A static advent calendar built with HTML, CSS, vanilla JavaScript, and JSON. Publish this folder as the root of a GitHub Pages site; no build step or package installation is required. Preview it through a local web server because the app fetches `calendar.json`.
 
-Opening a door zooms into its doorway, swings the door open, and brings its content forward as a note. Click the open door or the surrounding scene to zoom back out; Escape and the close button also return to the calendar.
+## Calendar data
 
-## Door content
+`calendar.json` defines all 24 doors and their cover, physical media, content type, relative content path, and destination view. Keep the destination consistent with its media: VHS goes to `vcr`, cassettes to `radio`, and NES cartridges to `nes`. Content stays in its numbered `assets/Content/<day>/` folder.
 
-Edit `calendar.json` to change the title, type, or content of a day. Keep one entry for each day from 1 through 24. Supported types:
+The shelf coordinate configuration is at the top of `app.js`; its 24 percentage pairs map to the 3:2 background scene from left to right and top to bottom. Adjust those values to line up covers with the shelf cubbies.
 
-- `message`: `content` displays plain text.
-- `image`: `src` is an image path and `alt` describes the image; optional `content` adds a caption.
-- `download`: `href` points to a file, normally under `downloads/`; `label` customizes the download link and `content` adds an introduction.
-- `link`: `href` is a same-site or HTTPS link; `label` and `content` are optional.
-- `embed`: `src` is an HTTPS or same-site URL shown in a sandboxed frame.
-- `game` or `page`: `src` points to a custom HTML activity, for example `doors/day-01.html`.
+## Date availability and progress
 
-Use paths relative to this project, such as `assets/winter.jpg`, `downloads/song.pdf`, and `doors/day-01.html`. Content is built with DOM text and attributes rather than interpreted as raw HTML.
+`MVP_TEST_MODE` in `app.js` is enabled for local testing, so all 24 doors are available. Turn it off for production date locking: unopened doors become available on their day in December. Opened days are saved in this browser under the `christmasCalendarState` localStorage key. **Reset progress** clears that key.
 
-## Progress and development
-
-Opened days are stored in this browser/device under the single `christmasCalendarState` localStorage key as `{ "openedDoors": [1, 2] }`. To test the first-open flow again, use **Reset calendar**; this development-only control clears the saved key and resets the doors. Remove the button and its handler from `index.html` and `app.js` before release if you do not want it available to visitors.
-
-Date locking is intentionally not active. Add the date check in `getDoorState(day)` in `app.js`, returning `locked` for unopened days that are not yet available and `available` for unlocked days. Opened days already return `opened`.
+Opening a door uses one reusable flow for zooming into its case, opening the front, removing the physical media, and presenting the matching TV or stereo view. VHS and NES share a TV startup sequence: off, static, test card, then selected content. The static sound at `assets/sound/static.mp3` plays only with the static video. Escape or the visible Close button stops and resets playback and returns to the shelves.
