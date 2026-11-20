@@ -1,0 +1,12 @@
+{
+  "name": "pixel-hop-twins",
+  "version": "1.0.0",
+  "description": "Independent 8-bit browser platformer — Vanilla JS + HTML5 Canvas",
+  "private": true,
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": ["game", "platformer", "canvas", "8-bit", "retro"],
+  "author": "stm1978",
+  "license": "MIT"
+}
