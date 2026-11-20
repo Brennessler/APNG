@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Minesweeper</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💣</text></svg>">
+</head>
+<body>
+    <main class="app" tabindex="-1" aria-label="Minesweeper">
+        <header class="topbar">
+            <div class="levels" role="group" aria-label="Difficulty">
+                <button class="level" data-level="beginner">Beginner</button>
+                <button class="level" data-level="intermediate">Intermediate</button>
+            </div>
+        </header>
+
+        <section class="hud">
+            <div class="counter" id="mine-counter" title="Mines left">010</div>
+            <button class="reset" id="reset" title="New game" aria-label="New game">🙂</button>
+            <div class="counter" id="timer" title="Time">000</div>
+        </section>
+
+        <div class="board-wrap">
+            <div class="board" id="board" aria-label="Minefield"></div>
+        </div>
+
+        <footer class="statusbar">
+            <button class="flag-mode" id="flag-mode" title="Flag mode (touch)" aria-pressed="false">🚩 Flag mode</button>
+            <span class="best" id="best"></span>
+        </footer>
+    </main>
+    <script src="minesweeper-core.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
