@@ -1,6 +1,11 @@
 const STORAGE_KEY = "christmasCalendarState";
 const TOTAL_DOORS = 24;
 const MVP_TEST_MODE = true;
+const BACKGROUND_TRACKS = [
+  "assets/sound/One Man Quartet - Auld Lang Syne (Smooth Jazz Version).mp3",
+  "assets/sound/One Man Quartet - Hark! The Herald Angels Sing (Smooth Jazz Version).mp3",
+  "assets/sound/One Man Quartet - Silent Night (Smooth Jazz Version).mp3"
+];
 const STATES = Object.freeze({
   SHELF: "SHELF",
   CASE_ZOOMING: "CASE_ZOOMING",
@@ -36,8 +41,12 @@ const tvStack = document.querySelector("#tv-stack");
 const tvOff = document.querySelector("#tv-off");
 const tvFrame = document.querySelector("#tv-frame");
 const tvGlass = document.querySelector("#tv-glass");
+const crtScreen = document.querySelector("#crt-screen");
 const screenVideo = document.querySelector("#screen-video");
 const screenImage = document.querySelector("#screen-image");
+const screenGame = document.querySelector("#screen-game");
+const gameLoading = document.querySelector("#game-loading");
+const gameError = document.querySelector("#game-error");
 const staticAudio = document.querySelector("#static-audio");
 const deviceEquipment = document.querySelector("#device-equipment");
 const radioView = document.querySelector("#radio-view");
@@ -47,6 +56,8 @@ const radioCassette = document.querySelector("#radio-cassette");
 const audioPlayer = document.querySelector("#audio-player");
 const audioToggle = document.querySelector("#audio-toggle");
 const audioTitle = document.querySelector("#audio-title");
+const backgroundMusic = document.querySelector("#background-music");
+const backgroundMusicToggle = document.querySelector("#background-music-toggle");
 const resetButton = document.querySelector("#reset-calendar");
 
 let calendarDoors = [];
@@ -54,10 +65,73 @@ let calendarState = { openedDoors: [] };
 let currentState = STATES.SHELF;
 let currentDoor = null;
 let lastFocusedDoor = null;
+let screenLive = null;
+let backgroundTrackIndex = 0;
+let backgroundMusicEnabled = false;
+let backgroundMusicUserChoice = false;
+let backgroundMusicPausedForExperience = false;
+let backgroundMusicPlayRequest = 0;
 const timers = new Map();
 const pendingMediaCancels = new Set();
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 staticAudio.volume = 0.5;
+backgroundMusic.volume = 0.22;
+
+function updateBackgroundMusicToggle() {
+  backgroundMusicToggle.setAttribute("aria-pressed", String(backgroundMusicEnabled));
+  backgroundMusicToggle.setAttribute(
+    "aria-label",
+    backgroundMusicEnabled ? "Turn background music off" : "Turn background music on"
+  );
+  backgroundMusicToggle.textContent = backgroundMusicEnabled ? "♫ Music on" : "♫ Music off";
+}
+
+function playBackgroundMusic() {
+  if (!backgroundMusicEnabled || backgroundMusicPausedForExperience) return;
+  if (!backgroundMusic.src) backgroundMusic.src = BACKGROUND_TRACKS[backgroundTrackIndex];
+  const request = ++backgroundMusicPlayRequest;
+  const playback = backgroundMusic.play();
+  if (!playback) return;
+  playback.catch((error) => {
+    if (request !== backgroundMusicPlayRequest || error.name === "AbortError") return;
+    console.warn("Background music could not start.", error);
+    showNotice("Background music could not start. Use the music button to try again.");
+  });
+}
+
+function setBackgroundMusicEnabled(enabled, userChoice = false) {
+  if (userChoice) backgroundMusicUserChoice = true;
+  backgroundMusicEnabled = enabled;
+  updateBackgroundMusicToggle();
+  if (enabled) playBackgroundMusic();
+  else {
+    backgroundMusicPlayRequest += 1;
+    backgroundMusic.pause();
+  }
+}
+
+function startBackgroundMusicForDoor() {
+  if (!backgroundMusicUserChoice) setBackgroundMusicEnabled(true);
+  else playBackgroundMusic();
+}
+
+function pauseBackgroundMusicForExperience() {
+  backgroundMusicPausedForExperience = true;
+  backgroundMusicPlayRequest += 1;
+  backgroundMusic.pause();
+}
+
+function resumeBackgroundMusicOnShelf() {
+  backgroundMusicPausedForExperience = false;
+  playBackgroundMusic();
+}
+
+backgroundMusic.addEventListener("ended", () => {
+  if (!backgroundMusicEnabled) return;
+  backgroundTrackIndex = (backgroundTrackIndex + 1) % BACKGROUND_TRACKS.length;
+  backgroundMusic.src = BACKGROUND_TRACKS[backgroundTrackIndex];
+  playBackgroundMusic();
+});
 
 function showNotice(message) {
   notice.textContent = message;
@@ -258,6 +332,35 @@ function waitForImage(image, path) {
   });
 }
 
+function waitForIframe(frame, path) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      frame.removeEventListener("load", onReady);
+      frame.removeEventListener("error", onError);
+      pendingMediaCancels.delete(onCancel);
+      window.clearTimeout(timeout);
+      timers.delete(timeout);
+    };
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const onReady = () => finish();
+    const onError = () => finish(new Error(`The browser could not load ${path}.`));
+    const onCancel = () => finish(new Error("Game loading was cancelled."));
+    frame.addEventListener("load", onReady, { once: true });
+    frame.addEventListener("error", onError, { once: true });
+    pendingMediaCancels.add(onCancel);
+    const timeout = window.setTimeout(() => finish(new Error(`Loading ${path} timed out.`)), 15000);
+    timers.set(timeout, null);
+    frame.src = new URL(path, document.baseURI).href;
+  });
+}
+
 function pauseAndReset(media) {
   media.pause();
   try {
@@ -278,6 +381,17 @@ function clearPlayback() {
   screenImage.hidden = true;
   screenImage.removeAttribute("src");
   screenImage.onerror = null;
+  if (document.activeElement === screenGame) experienceClose.focus();
+  screenGame.hidden = true;
+  screenGame.title = "";
+  screenGame.src = "about:blank";
+  if (screenLive) {
+    screenLive.remove();
+    screenLive = null;
+  }
+  gameLoading.hidden = true;
+  gameError.hidden = true;
+  gameError.textContent = "";
   audioToggle.disabled = false;
   audioToggle.textContent = "Pause";
 }
@@ -316,6 +430,7 @@ function getCenteredCaseSize() {
 // The shared case moves through zoom, hinged-front opening, and media-removal states.
 async function openDoor(door, button) {
   if (currentState !== STATES.SHELF || (!MVP_TEST_MODE && !isDateAvailable(door.day))) return;
+  startBackgroundMusicForDoor();
   currentState = STATES.CASE_ZOOMING;
   currentDoor = door;
   lastFocusedDoor = button;
@@ -368,6 +483,7 @@ async function openDoor(door, button) {
 
 async function presentDestination(door) {
   currentState = STATES.DEVICE_LOADING;
+  pauseBackgroundMusicForExperience();
   deviceView.hidden = false;
   deviceView.classList.add("is-visible");
   showStatus(`Preparing door ${door.day}…`);
@@ -379,7 +495,8 @@ async function presentDestination(door) {
   } catch (error) {
     if (currentState !== STATES.CLOSING) {
       console.error(`Could not prepare content for door ${door.day}.`, error);
-      showStatus(`Door ${door.day}: could not load ${door.source}. ${error.message}`);
+      const contentReference = door.source || `YouTube video ${door.videoId}`;
+      showStatus(`Door ${door.day}: could not load ${contentReference}. ${error.message}`);
       currentState = STATES.CONTENT_PLAYING;
     }
   }
@@ -460,6 +577,67 @@ async function playTvStartup(door) {
   return true;
 }
 
+function handleGameFrameKeydown(event) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeExperience();
+  }
+}
+
+async function playGame(door) {
+  const gamePath = door.source;
+  screenVideo.hidden = true;
+  screenImage.hidden = true;
+  screenGame.title = `${door.gameTitle} game`;
+  screenGame.hidden = false;
+  gameError.hidden = true;
+  gameLoading.hidden = false;
+  gameLoading.textContent = `Loading ${door.gameTitle}…`;
+
+  try {
+    const response = await fetch(gamePath, { method: "HEAD" });
+    if (!response.ok) throw new Error(`The game request failed with status ${response.status}.`);
+    if (currentState !== STATES.DEVICE_LOADING) return;
+
+    await waitForIframe(screenGame, gamePath);
+    if (currentState !== STATES.DEVICE_LOADING) return;
+
+    const gameDocument = screenGame.contentDocument;
+    if (!gameDocument) throw new Error("The game document is unavailable.");
+    gameDocument.addEventListener("keydown", handleGameFrameKeydown, true);
+    const gameFocusTarget = gameDocument.querySelector(
+      "[data-game-focus], main[tabindex='-1'], [tabindex='0'], button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+    );
+    gameLoading.hidden = true;
+    showStatus("");
+    screenGame.focus();
+    if (gameFocusTarget) gameFocusTarget.focus();
+  } catch (error) {
+    if (currentState === STATES.DEVICE_LOADING) {
+      console.error(`Could not load the game for door ${door.day}.`, error);
+      screenGame.hidden = true;
+      screenGame.src = "about:blank";
+      gameLoading.hidden = true;
+      gameError.textContent = `${door.gameTitle} could not be loaded. Close the TV and try again.`;
+      gameError.hidden = false;
+      showStatus("");
+    }
+  }
+}
+
+function playLiveVideo(door) {
+  const frame = document.createElement("iframe");
+  frame.className = "screen-live";
+  frame.title = `YouTube livestream for door ${door.day}`;
+  frame.allow = "autoplay; encrypted-media; picture-in-picture";
+  frame.allowFullscreen = true;
+  frame.referrerPolicy = "strict-origin-when-cross-origin";
+  frame.src = `https://www.youtube.com/embed/${encodeURIComponent(door.videoId)}?autoplay=1&mute=1&controls=0&playsinline=1`;
+  screenLive = frame;
+  crtScreen.append(frame);
+  showStatus("");
+}
+
 // TV content uses the same clipped CRT and layered frame/glass for VHS and NES.
 async function playTelevision(door) {
   radioView.hidden = true;
@@ -468,6 +646,16 @@ async function playTelevision(door) {
   deviceEquipment.alt = door.destinationView === "vcr" ? "VHS video cassette recorder" : "Nintendo Entertainment System";
   const startupFinished = await playTvStartup(door);
   if (!startupFinished || currentState !== STATES.DEVICE_LOADING) return;
+
+  if (door.contentType === "game") {
+    await playGame(door);
+    return;
+  }
+
+  if (door.contentType === "live") {
+    playLiveVideo(door);
+    return;
+  }
 
   showStatus(`Loading door ${door.day}…`);
   if (door.contentType === "image") {
@@ -522,6 +710,7 @@ async function closeExperience() {
   experience.setAttribute("aria-hidden", "true");
   document.body.classList.remove("experience-open");
   currentState = STATES.SHELF;
+  resumeBackgroundMusicOnShelf();
   if (lastFocusedDoor && document.contains(lastFocusedDoor)) lastFocusedDoor.focus();
 }
 
@@ -548,10 +737,26 @@ function validateCalendarData(data) {
     if (!door || !Number.isInteger(door.day) || door.day < 1 || door.day > TOTAL_DOORS ||
       typeof door.title !== "string" || typeof door.cover !== "string" ||
       !["vhs", "cassette", "nes"].includes(door.mediaType) ||
-      !["video", "image", "audio"].includes(door.contentType) ||
-      typeof door.source !== "string" ||
+      !["video", "image", "audio", "game", "live"].includes(door.contentType) ||
+      (door.contentType === "live" ? door.source !== undefined : typeof door.source !== "string") ||
       !["vcr", "radio", "nes"].includes(door.destinationView)) {
-      throw new TypeError("Every door needs valid title, cover, media, content, source, and destination data.");
+      throw new TypeError("Every door needs valid title, cover, media, content, and destination data.");
+    }
+    if (door.contentType === "game") {
+      if (typeof door.gameId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(door.gameId) ||
+        typeof door.gameTitle !== "string" || door.source.startsWith("/") ||
+        new URL(door.source, document.baseURI).origin !== location.origin) {
+        throw new TypeError(`Door ${door.day} needs a game id, title, and same-origin relative source.`);
+      }
+    } else if (door.gameId !== undefined || door.gameTitle !== undefined) {
+      throw new TypeError(`Door ${door.day} has game metadata but is not game content.`);
+    }
+    if (door.contentType === "live") {
+      if (typeof door.videoId !== "string" || !/^[A-Za-z0-9_-]{11}$/.test(door.videoId)) {
+        throw new TypeError(`Door ${door.day} needs a valid YouTube video ID for live content.`);
+      }
+    } else if (door.videoId !== undefined) {
+      throw new TypeError(`Door ${door.day} has a YouTube video ID but is not live content.`);
     }
     if (days.has(door.day)) throw new TypeError(`calendar.json contains day ${door.day} more than once.`);
     days.add(door.day);
@@ -592,13 +797,17 @@ audioToggle.addEventListener("click", async () => {
   }
 });
 
+backgroundMusicToggle.addEventListener("click", () => {
+  setBackgroundMusicEnabled(!backgroundMusicEnabled, true);
+});
+
 experienceClose.addEventListener("click", closeExperience);
 experience.addEventListener("click", (event) => {
   if (event.target === experience) closeExperience();
 });
 experience.addEventListener("keydown", (event) => {
   if (event.key !== "Tab") return;
-  const focusable = [...experience.querySelectorAll("button:not([disabled]), video[controls]")]
+  const focusable = [...experience.querySelectorAll("button:not([disabled]), video[controls], iframe")]
     .filter((element) => !element.closest("[hidden]"));
   if (focusable.length === 0) {
     event.preventDefault();
